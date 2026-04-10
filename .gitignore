@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+tests/*.docx
+tests/*.zip
+tests/media/
+output*.md
+*.zip
