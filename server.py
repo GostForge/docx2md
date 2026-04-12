@@ -37,3 +37,7 @@ async def convert_docx(file: UploadFile = File(...)):
             zip_bytes = f.read()
 
         return Response(content=zip_bytes, media_type="application/zip")
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
