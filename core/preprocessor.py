@@ -2,6 +2,83 @@ import re
 import docx
 from docx.oxml.ns import qn
 
+
+def simplify_layout_tables(doc: docx.Document) -> docx.Document:
+    """
+    Converts sparse layout tables (commonly used on title pages) into plain
+    paragraphs before Pandoc conversion. This prevents malformed wide pipe tables
+    with mostly empty cells in Markdown output.
+    """
+    for table in list(doc.tables):
+        if not _is_layout_table(table):
+            continue
+
+        tbl = table._tbl
+        extracted_lines = []
+        for row in table.rows:
+            row_texts = []
+            seen_cells = set()
+            for cell in row.cells:
+                cell_id = id(cell._tc)
+                if cell_id in seen_cells:
+                    continue
+                seen_cells.add(cell_id)
+
+                text = " ".join(part.strip() for part in cell.text.splitlines() if part.strip())
+                if text:
+                    row_texts.append(text)
+
+            if row_texts:
+                extracted_lines.append(" — ".join(row_texts))
+
+        for line in extracted_lines:
+            _insert_paragraph_before(tbl, line)
+
+        parent = tbl.getparent()
+        if parent is not None:
+            parent.remove(tbl)
+
+    return doc
+
+
+def _is_layout_table(table) -> bool:
+    total_cells = 0
+    non_empty_cells = 0
+    image_cells = 0
+
+    for row in table.rows:
+        seen_cells = set()
+        for cell in row.cells:
+            cell_id = id(cell._tc)
+            if cell_id in seen_cells:
+                continue
+            seen_cells.add(cell_id)
+
+            total_cells += 1
+            text = " ".join(part.strip() for part in cell.text.splitlines() if part.strip())
+            if text:
+                non_empty_cells += 1
+            if cell._tc.xpath('.//w:drawing | .//w:pict'):
+                image_cells += 1
+
+    if total_cells == 0:
+        return False
+
+    non_empty_ratio = non_empty_cells / total_cells
+    return non_empty_ratio <= 0.45 and (image_cells > 0 or non_empty_cells <= 3)
+
+
+def _insert_paragraph_before(anchor, text: str) -> None:
+    new_p = docx.oxml.OxmlElement('w:p')
+    new_r = docx.oxml.OxmlElement('w:r')
+    new_t = docx.oxml.OxmlElement('w:t')
+    if text != text.strip():
+        new_t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    new_t.text = text
+    new_r.append(new_t)
+    new_p.append(new_r)
+    anchor.addprevious(new_p)
+
 def remove_toc_and_add_placeholder(doc: docx.Document) -> docx.Document:
     """
     Finds standard (w:sdt) and manual (md2gost) TOC in the docx file
