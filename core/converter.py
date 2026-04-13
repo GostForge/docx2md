@@ -6,7 +6,7 @@ from typing import Union
 import docx
 import pypandoc
 
-from core.preprocessor import remove_toc_and_add_placeholder, simplify_layout_tables, prepare_tables_for_markdown
+from core.preprocessor import remove_toc_and_add_placeholder, prepare_tables_for_markdown
 from core.postprocessor import apply_postprocessing
 
 class DocxToMdConverter:
@@ -30,9 +30,6 @@ class DocxToMdConverter:
         
         print("Replacing TOC with [TOC]...")
         doc = remove_toc_and_add_placeholder(doc)
-
-        print("Simplifying layout tables...")
-        doc = simplify_layout_tables(doc)
 
         print("Preparing tables to prevent [TABLE] fallback...")
         doc = prepare_tables_for_markdown(doc)

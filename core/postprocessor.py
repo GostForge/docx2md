@@ -103,16 +103,6 @@ def normalize_lists(content: str) -> str:
             new_lines.append(line)
     return "\n".join(new_lines)
 
-def normalize_escaped_ordered_lists(content: str) -> str:
-    """
-    Converts escaped ordered list markers produced by Pandoc (e.g. '1\\.')
-    into proper Markdown ordered lists and removes extra blank lines between
-    consecutive ordered list entries.
-    """
-    content = re.sub(r'^(\s*\d+)\\\.\s+', r'\1. ', content, flags=re.MULTILINE)
-    content = re.sub(r'^(\s*\d+\.\s[^\n]+)\n{2,}(?=\s*\d+\.\s)', r'\1\n', content, flags=re.MULTILINE)
-    return content
-
 def normalize_headings(content: str) -> str:
     """
     Removes GOST numbering from existing markdown headings and converts
@@ -148,7 +138,6 @@ def apply_postprocessing(content: str) -> str:
             .add_rule(remove_empty_paragraphs)\
             .add_rule(integrate_image_captions)\
             .add_rule(normalize_lists)\
-            .add_rule(normalize_escaped_ordered_lists)\
             .add_rule(normalize_headings)
             
     return pipeline.process(content)
