@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Union
@@ -11,6 +12,15 @@ from core.postprocessor import apply_postprocessing
 
 
 MEDIA_RELATIVE_PREFIX = "media/"
+_WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
+_IMAGE_LINK_RE = re.compile(r"!\[(?P<alt>[^\]]*)\]\((?P<target>[^)]+)\)")
+
+
+def _collapse_media_prefix(path: str) -> str:
+    normalized = path
+    while normalized.lower().startswith("media/media/"):
+        normalized = normalized[len("media/"):]
+    return normalized
 
 class DocxToMdConverter:
     """
@@ -21,15 +31,45 @@ class DocxToMdConverter:
     def __init__(self, extract_media_path: Union[str, Path] = "./media") -> None:
         self.extract_media_path = str(extract_media_path)
 
+    @staticmethod
+    def _looks_like_windows_absolute(path: str) -> bool:
+        return bool(_WINDOWS_ABS_RE.match(path))
+
+    def _normalize_target_path(self, target: str, media_path: Path) -> str:
+        normalized = target.strip().replace("\\", "/")
+
+        if normalized.startswith("file://"):
+            normalized = normalized[len("file://"):]
+
+        if normalized.startswith(("http://", "https://", "data:")):
+            return normalized
+
+        media_posix = media_path.as_posix().rstrip("/")
+        if normalized.startswith(media_posix + "/"):
+            normalized = normalized[len(media_posix) + 1:]
+
+        is_abs = normalized.startswith("/") or self._looks_like_windows_absolute(normalized)
+        if is_abs:
+            media_index = normalized.lower().find("/media/")
+            if media_index != -1:
+                normalized = normalized[media_index + 1:]
+            else:
+                normalized = os.path.basename(normalized)
+
+        normalized = normalized.lstrip("/").lstrip("./")
+        normalized = _collapse_media_prefix(normalized)
+        return normalized
+
     def _sanitize_media_links(self, content: str) -> str:
         media_path = Path(self.extract_media_path).resolve()
-        media_posix = media_path.as_posix().rstrip("/")
-        media_native = str(media_path).rstrip("/\\")
 
-        sanitized = content.replace(f"{media_posix}/", MEDIA_RELATIVE_PREFIX)
-        sanitized = sanitized.replace(f"{media_native}/", MEDIA_RELATIVE_PREFIX)
-        sanitized = sanitized.replace(f"{media_native}\\", MEDIA_RELATIVE_PREFIX)
-        return sanitized
+        def replace_link(match: re.Match) -> str:
+            alt = match.group("alt")
+            target = match.group("target")
+            normalized_target = self._normalize_target_path(target, media_path)
+            return f"![{alt}]({normalized_target})"
+
+        return _IMAGE_LINK_RE.sub(replace_link, content)
 
     def convert(self, input_file: Union[str, Path], output_file: Union[str, Path]) -> None:
         input_file = Path(input_file).absolute()
@@ -70,6 +110,7 @@ class DocxToMdConverter:
                 
             content = self._sanitize_media_links(content)
             content = apply_postprocessing(content)
+            content = self._sanitize_media_links(content)
             
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(content)
