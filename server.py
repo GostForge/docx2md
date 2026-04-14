@@ -10,7 +10,7 @@ from core.converter import DocxToMdConverter
 app = FastAPI()
 
 @app.post("/convert")
-async def convert_docx(file: UploadFile = File(...)):
+def convert_docx(file: UploadFile = File(...)):
     with tempfile.TemporaryDirectory() as tmpdir:
         input_path = os.path.join(tmpdir, "input.docx")
         output_md = os.path.join(tmpdir, "output.md")
@@ -19,7 +19,9 @@ async def convert_docx(file: UploadFile = File(...)):
         with open(input_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
             
-        converter = DocxToMdConverter(extract_media_path=media_dir)
+        # Use tmpdir as pandoc extract root so links become .../media/<file>
+        # instead of .../media/media/<file>.
+        converter = DocxToMdConverter(extract_media_path=tmpdir)
         converter.convert(input_path, output_md)
         
         # Package everything into a ZIP
